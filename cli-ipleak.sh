@@ -42,13 +42,17 @@ EXPLAIN=0
 PROG="${0##*/}"
 VERSION="0.1.0"
 
+die() { echo "${PROG}: $*" >&2; exit 2; }
+
 # Lightweight flag parsing (no external getopts dependencies).
 while [[ ${1:-} ]]; do
   case "$1" in
     --no-sudo) NO_SUDO=1 ;;
     --no-capture) DO_CAPTURE=0 ;;
     --capture-seconds)
-      CAPTURE_SECONDS=${2:-5}
+      [[ -n ${2:-} ]] || die "--capture-seconds requires a value"
+      [[ ${2} =~ ^[0-9]+$ ]] || die "--capture-seconds must be a positive integer"
+      CAPTURE_SECONDS=$2
       shift
       ;;
     --no-geo) DO_GEO=0 ;;
@@ -109,6 +113,7 @@ curl_try_ip() {
   #   Designed to be quick and resilient; errors are swallowed.
   local fam="$1"
   local flag="-${fam}"
+  have curl || return 1
   local -a endpoints=(
     "https://ifconfig.co"
     "https://api.ipify.org"
@@ -116,10 +121,8 @@ curl_try_ip() {
     "https://icanhazip.com"
   )
   for url in "${endpoints[@]}"; do
-    if have curl; then
-      if out=$(curl -fsS $flag --max-time 5 --connect-timeout 3 "$url" 2>/dev/null | tr -d '\r' | head -n1); then
-        [[ -n "$out" ]] && echo "$out" && return 0
-      fi
+    if out=$(curl -fsS $flag --max-time 5 --connect-timeout 3 "$url" 2>/dev/null | tr -d '\r' | head -n1); then
+      [[ -n "$out" ]] && echo "$out" && return 0
     fi
   done
   return 1
@@ -212,7 +215,7 @@ print_geo_info() {
     echo "-- ip-api.com --"
     if have jq; then
       curl -fsS --max-time 5 --connect-timeout 3 \
-        "http://ip-api.com/json/${ip}?fields=status,message,continent,continentCode,country,countryCode,regionName,city,zip,lat,lon,timezone,isp,org,as,asname,reverse,proxy,hosting,mobile,query" \
+        "https://ip-api.com/json/${ip}?fields=status,message,continent,continentCode,country,countryCode,regionName,city,zip,lat,lon,timezone,isp,org,as,asname,reverse,proxy,hosting,mobile,query" \
         | jq -r 'if .status=="success" then [
             {k:"as",v:.as},
             {k:"asname",v:.asname},
@@ -233,7 +236,7 @@ print_geo_info() {
         || echo "(ip-api.com query failed)"
     else
       curl -fsS --max-time 5 --connect-timeout 3 \
-        "http://ip-api.com/json/${ip}?fields=status,message,country,regionName,city,zip,lat,lon,timezone,isp,org,as,reverse,proxy,hosting,mobile,query" \
+        "https://ip-api.com/json/${ip}?fields=status,message,country,regionName,city,zip,lat,lon,timezone,isp,org,as,reverse,proxy,hosting,mobile,query" \
         || echo "(ip-api.com query failed)"
     fi
   else
@@ -248,7 +251,12 @@ ex \
   "Confirms whether traffic exits via your VPN or ISP."
 if ip4=$(curl_try_ip 4); then
   echo "$ip4"
-  echo "Reverse DNS:" $(reverse_dns "$ip4" || echo "(none or lookup failed)")
+  rev4=$(reverse_dns "$ip4" || true)
+  if [[ -n "$rev4" ]]; then
+    echo "Reverse DNS: $rev4"
+  else
+    echo "Reverse DNS: (none or lookup failed)"
+  fi
   echo
   echo "IPv4 background info"
   print_geo_info "$ip4"
@@ -264,7 +272,12 @@ ex \
   "If your VPN lacks IPv6 support, it should be disabled to avoid leaks."
 if ip6=$(curl_try_ip 6); then
   echo "$ip6"
-  echo "Reverse DNS:" $(reverse_dns "$ip6" || echo "(none or lookup failed)")
+  rev6=$(reverse_dns "$ip6" || true)
+  if [[ -n "$rev6" ]]; then
+    echo "Reverse DNS: $rev6"
+  else
+    echo "Reverse DNS: (none or lookup failed)"
+  fi
   echo
   echo "IPv6 background info"
   print_geo_info "$ip6"
@@ -392,12 +405,17 @@ ex \
   "Helps detect cleartext DNS leaks or unexpected resolvers."
 if (( DO_CAPTURE )); then
   if have tcpdump; then
-    if (( NO_SUDO )); then
+    if ! have timeout; then
+      echo "timeout not installed; skipping DNS capture"
+    elif (( NO_SUDO )); then
       echo "Skipping sudo; attempting capture without elevated privileges..."
       timeout "${CAPTURE_SECONDS}" tcpdump -n -i any port 53 2>/dev/null | awk '{print $1,$2,$3,$4,$5,$6}' || true
-    else
+    elif have sudo; then
       echo "Running tcpdump for ${CAPTURE_SECONDS}s... (may prompt for sudo)"
       sudo timeout "${CAPTURE_SECONDS}" tcpdump -n -i any port 53 2>/dev/null | awk '{print $1,$2,$3,$4,$5,$6}' || true
+    else
+      echo "sudo not available; attempting capture without elevated privileges..."
+      timeout "${CAPTURE_SECONDS}" tcpdump -n -i any port 53 2>/dev/null | awk '{print $1,$2,$3,$4,$5,$6}' || true
     fi
   else
     echo "tcpdump not installed (install tcpdump for packet capture)"
