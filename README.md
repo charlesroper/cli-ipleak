@@ -1,72 +1,68 @@
-cli-ipleak
-===========
+# cli-ipleak
 
-A simple, self-contained CLI script to sanity-check for IP/DNS leaks and routing issues. It reports your public IPv4/IPv6, default routes, the kernel-selected egress IP, DNS configuration and resolution behavior, brief DNS capture targets, and basic path traces. It also provides optional background info (ASN/ISP/geo) for your public IPs.
+A simple, self-contained CLI script to check for IP/DNS leaks and routing issues. Use this to verify that your VPN or proxy is working correctly and that your system isn't leaking identifying information to your ISP.
 
-Features
---------
-- Public IP detection (IPv4/IPv6) via multiple providers with timeouts
-- Reverse DNS for detected public IPs
-- Optional background info from ipinfo.io and ip-api.com
-- Routing context: default routes, interface global addresses, route to 8.8.8.8
-- DNS configuration: systemd-resolved status and `/etc/resolv.conf` parsing
-- DNS probes: Google, Cloudflare, and system resolver comparisons
-- Resolver “client IP” checks with resilient paths (Google myaddr, DoH, HTTPS trace)
-- Optional short DNS capture (tcpdump) to see port 53 egress
-- Traceroute/MTR to 1.1.1.1 to visualize hops
-- Explain mode to show what/why under each section
-- Helpful `--help` with usage, options, notes, and examples
+## Features
 
-Usage
------
-Run the script:
+- **IP Detection:** Reports public IPv4 and IPv6 addresses with reverse DNS and optional geo-location data.
+- **Routing Checks:** Verifies default routes and the kernel-selected egress path for traffic to common targets (e.g., `8.8.8.8`).
+- **DNS Diagnostics:** Parses `/etc/resolv.conf`, checks `systemd-resolved` status, and compares resolution behavior across multiple providers.
+- **Leak Detection:** Uses Google "myaddr" (UDP/DoH) and Cloudflare HTTPS traces to identify the "client IP" seen by DNS resolvers.
+- **Traffic Visualization:** Includes a short DNS packet capture and path traces via `mtr` or `traceroute`.
 
-- Basic: `bash cli-ipleak.sh`
-- With explainers: `bash cli-ipleak.sh --explain`
+## Prerequisites
 
-Options:
-- `--explain` — Print short explainer text under each section
-- `--no-capture` — Skip tcpdump DNS capture
-- `--no-sudo` — Do not use sudo for tcpdump capture
-- `--capture-seconds N` — DNS capture duration (default: 5)
-- `--no-geo` — Skip ASN/ISP/geo lookups for public IPs
-- `-h`, `--help` — Show help and exit
-
-Examples:
-- `bash cli-ipleak.sh --explain`
-- `bash cli-ipleak.sh --no-capture --no-geo`
-- `bash cli-ipleak.sh --capture-seconds 10 --no-sudo`
-
-What to look for
-----------------
-- Public IPv4/IPv6 should match your VPN egress or intended exit. If your VPN does not support IPv6, IPv6 should be disabled or tunneled to avoid leaks.
-- `ip route get 8.8.8.8` should show a VPN interface/source when the VPN is active.
-- DNS: System resolver and the capture (when enabled) should indicate your intended resolvers (VPN DNS, DoT/DoH endpoints, etc.), not your ISP.
-- Traceroute first hops should reflect the VPN path, not your ISP gateway.
-
-Dependencies
-------------
-Required:
+### Required
 - `bash`
 - `curl`
-- `ip` (from iproute2)
+- `ip` (from `iproute2`)
 
-Optional (enables richer output and/or fallbacks):
-- `dig` (bind9-dnsutils) or `nslookup`
-- `resolvectl` (systemd-resolved) or `systemd-resolve`
-- `tcpdump` (for the short DNS capture; may require sudo)
-- `mtr` (preferred) or `traceroute`
-- `ss` (from iproute2) for local DNS listeners
-- `jq` (pretty JSON extraction for background lookups and DoH)
+### Optional (Recommended for full output)
+- `dig` or `nslookup` (DNS lookups)
+- `tcpdump` (DNS packet capture; requires sudo)
+- `mtr` or `traceroute` (Path tracing)
+- `jq` (JSON parsing for geo-location data)
 
-Permissions
------------
-- The DNS capture uses `tcpdump` and may prompt for sudo. Use `--no-sudo` to avoid elevation or `--no-capture` to skip entirely.
+## Usage
 
-Notes on filtered networks
---------------------------
-- Some networks/VPNs block TCP/53 and/or drop “whoami/myip” DNS queries via DPI. The script includes resilient checks (Google myaddr over UDP/DoH and Cloudflare HTTPS trace) so you still get signal even when DNS/53 is filtered.
+Run the script directly with bash:
 
-License
--------
-MIT — see `LICENSE`.
+```bash
+bash cli-ipleak.sh
+```
+
+### Common Options
+
+- `--explain`: Adds a brief explanation under each section to help you interpret the results.
+- `--no-capture`: Skips the `tcpdump` DNS capture (useful if you don't have sudo access).
+- `--no-geo`: Skips ASN, ISP, and geographic lookups for your public IPs.
+- `--capture-seconds N`: Sets the DNS capture duration (default is 5 seconds).
+
+### Examples
+
+**Run with explanations:**
+```bash
+bash cli-ipleak.sh --explain
+```
+
+**Run without sudo requirements or geo lookups:**
+```bash
+bash cli-ipleak.sh --no-capture --no-geo
+```
+
+## What to Check
+
+When running this tool, look for the following signs of a leak:
+
+1. **Public IP:** Your IPv4 and IPv6 addresses should match your VPN's exit node. If your VPN doesn't support IPv6, ensure it is disabled or tunneled; otherwise, your real IPv6 address may leak.
+2. **Routes:** `ip route get 8.8.8.8` should show your VPN interface as the gateway.
+3. **DNS Resolvers:** The "System Resolver" and "Client IP" sections should show your intended DNS providers (e.g., VPN DNS, Cloudflare, Google), not your ISP's servers.
+4. **Traceroute:** The first few hops should reflect your VPN path, not your local ISP gateway.
+
+## Permissions
+
+The DNS capture feature uses `tcpdump` and typically requires `sudo`. If you want to avoid a password prompt, use the `--no-capture` or `--no-sudo` flags.
+
+## License
+
+MIT — See `LICENSE` for details.
