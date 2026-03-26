@@ -42,6 +42,14 @@ EXPLAIN=0
 PROG="${0##*/}"
 VERSION="0.1.0"
 
+cleanup() {
+  if [[ -n "${TCPDUMP_PID:-}" ]]; then
+    kill -TERM "$TCPDUMP_PID" 2>/dev/null || true
+    wait "$TCPDUMP_PID" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT
+
 die() { echo "${PROG}: $*" >&2; exit 2; }
 
 # Lightweight flag parsing (no external getopts dependencies).
@@ -52,6 +60,7 @@ while [[ ${1:-} ]]; do
     --capture-seconds)
       [[ -n ${2:-} ]] || die "--capture-seconds requires a value"
       [[ ${2} =~ ^[0-9]+$ ]] || die "--capture-seconds must be a positive integer"
+      [[ ${2} -gt 0 && ${2} -le 300 ]] || die "--capture-seconds must be 1-300 seconds"
       CAPTURE_SECONDS=$2
       shift
       ;;
@@ -94,15 +103,12 @@ done
 # have CMD → return 0 if command exists
 have() { command -v "$1" >/dev/null 2>&1; }
 
-# ex "line1" "line2" → prints when --explain is set
-ex() {
-  # Print one or more lines only when --explain is set
-  if (( EXPLAIN )); then
-    for line in "$@"; do
-      echo "$line"
-    done
-  fi
+have_timeout() {
+  have timeout || command -v gtimeout >/dev/null 2>&1
 }
+
+# ex "line1" "line2" → prints when --explain is set
+ex() { (( EXPLAIN )) && printf '%s\n' "$@"; }
 
 curl_try_ip() {
   # Fetch public IP using multiple providers with short timeouts.
@@ -112,7 +118,7 @@ curl_try_ip() {
   #   Iterates over a small set of HTTPS endpoints and returns on first success.
   #   Designed to be quick and resilient; errors are swallowed.
   local fam="$1"
-  local flag="-${fam}"
+  local flag="-${fam}" out=""
   have curl || return 1
   local -a endpoints=(
     "https://ifconfig.co"
@@ -405,17 +411,17 @@ ex \
   "Helps detect cleartext DNS leaks or unexpected resolvers."
 if (( DO_CAPTURE )); then
   if have tcpdump; then
-    if ! have timeout; then
-      echo "timeout not installed; skipping DNS capture"
+    if ! have_timeout; then
+      echo "timeout/gtimeout not available; skipping DNS capture"
     elif (( NO_SUDO )); then
       echo "Skipping sudo; attempting capture without elevated privileges..."
-      timeout "${CAPTURE_SECONDS}" tcpdump -n -i any port 53 2>/dev/null | awk '{print $1,$2,$3,$4,$5,$6}' || true
+      timeout -s TERM "${CAPTURE_SECONDS}" tcpdump -n -i any port 53 2>/dev/null | awk '{print $1,$2,$3,$4,$5,$6}' || true
     elif have sudo; then
       echo "Running tcpdump for ${CAPTURE_SECONDS}s... (may prompt for sudo)"
-      sudo timeout "${CAPTURE_SECONDS}" tcpdump -n -i any port 53 2>/dev/null | awk '{print $1,$2,$3,$4,$5,$6}' || true
+      sudo timeout -s TERM "${CAPTURE_SECONDS}" tcpdump -n -i any port 53 2>/dev/null | awk '{print $1,$2,$3,$4,$5,$6}' || true
     else
       echo "sudo not available; attempting capture without elevated privileges..."
-      timeout "${CAPTURE_SECONDS}" tcpdump -n -i any port 53 2>/dev/null | awk '{print $1,$2,$3,$4,$5,$6}' || true
+      timeout -s TERM "${CAPTURE_SECONDS}" tcpdump -n -i any port 53 2>/dev/null | awk '{print $1,$2,$3,$4,$5,$6}' || true
     fi
   else
     echo "tcpdump not installed (install tcpdump for packet capture)"
