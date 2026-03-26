@@ -108,7 +108,7 @@ have_timeout() {
 }
 
 # ex "line1" "line2" → prints when --explain is set
-ex() { (( EXPLAIN )) && printf '%s\n' "$@"; }
+ex() { [[ EXPLAIN -eq 1 ]] && printf '%s\n' "$@" || true; }
 
 curl_try_ip() {
   # Fetch public IP using multiple providers with short timeouts.
