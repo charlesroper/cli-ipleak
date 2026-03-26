@@ -218,33 +218,7 @@ print_geo_info() {
       curl -fsS --max-time 5 --connect-timeout 3 "https://ipinfo.io/${ip}/json" || echo "(ipinfo.io query failed)"
     fi
     echo
-    echo "-- ip-api.com --"
-    if have jq; then
-      curl -fsS --max-time 5 --connect-timeout 3 \
-        "https://ip-api.com/json/${ip}?fields=status,message,continent,continentCode,country,countryCode,regionName,city,zip,lat,lon,timezone,isp,org,as,asname,reverse,proxy,hosting,mobile,query" \
-        | jq -r 'if .status=="success" then [
-            {k:"as",v:.as},
-            {k:"asname",v:.asname},
-            {k:"isp",v:.isp},
-            {k:"org",v:.org},
-            {k:"country",v:.country},
-            {k:"region",v:.regionName},
-            {k:"city",v:.city},
-            {k:"zip",v:.zip},
-            {k:"lat",v:(.lat|tostring)},
-            {k:"lon",v:(.lon|tostring)},
-            {k:"timezone",v:.timezone},
-            {k:"reverse",v:.reverse},
-            {k:"proxy",v:(.proxy|tostring)},
-            {k:"hosting",v:(.hosting|tostring)},
-            {k:"mobile",v:(.mobile|tostring)}
-          ] | .[] | select(.v!="" and .v!="null") | "\(.k): \(.v)" else .message end' \
-        || echo "(ip-api.com query failed)"
-    else
-      curl -fsS --max-time 5 --connect-timeout 3 \
-        "https://ip-api.com/json/${ip}?fields=status,message,country,regionName,city,zip,lat,lon,timezone,isp,org,as,reverse,proxy,hosting,mobile,query" \
-        || echo "(ip-api.com query failed)"
-    fi
+    echo "(ip-api.com now requires paid key - skipped)"
   else
     echo "curl not available; skipping geo/ASN lookups"
   fi
