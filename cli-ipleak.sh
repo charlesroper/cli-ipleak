@@ -194,7 +194,6 @@ print_geo_info() {
   #   $1 = ip
   # Sources:
   #   - ipinfo.io (JSON)
-  #   - ip-api.com (JSON)
   # Notes:
   #   Network timeouts are short; output is filtered if jq is present.
   local ip="$1"
@@ -217,8 +216,6 @@ print_geo_info() {
     else
       curl -fsS --max-time 5 --connect-timeout 3 "https://ipinfo.io/${ip}/json" || echo "(ipinfo.io query failed)"
     fi
-    echo
-    echo "(ip-api.com now requires paid key - skipped)"
   else
     echo "curl not available; skipping geo/ASN lookups"
   fi
